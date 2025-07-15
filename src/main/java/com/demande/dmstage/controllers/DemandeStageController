@@ -4,6 +4,7 @@ import com.demande.dmstage.entities.DemandeStage;
 import com.demande.dmstage.services.DemandeStageService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -17,21 +18,67 @@ public class DemandeStageController {
         this.service = service;
     }
 
+    /**
+     * Créer une nouvelle demande de stage (avec fichiers).
+     */
     @PostMapping
-    public ResponseEntity<DemandeStage> creerDemande(@RequestBody DemandeStage demande) {
-        DemandeStage nouvelleDemande = service.creerDemande(demande);
-        return ResponseEntity.ok(nouvelleDemande);
+    public ResponseEntity<DemandeStage> creerDemande(
+            @ModelAttribute DemandeStage demande,
+            @RequestParam("convention_stage") MultipartFile conventionStage,
+            @RequestParam("demande_stage") MultipartFile demandeStage,
+            @RequestParam("cv") MultipartFile cv,
+            @RequestParam("lettre_motivation") MultipartFile lettreMotivation,
+            @RequestParam("cin_recto") MultipartFile cinRecto,
+            @RequestParam("cin_verso") MultipartFile cinVerso,
+            @RequestParam("photo") MultipartFile photo
+    ) {
+        try {
+            // Ici, on met juste les noms des fichiers.
+            // Si tu veux enregistrer physiquement les fichiers, on ajoutera une logique dans le service.
+
+            demande.setConventionStage(conventionStage.getOriginalFilename());
+            demande.setDemandeStage(demandeStage.getOriginalFilename());
+            demande.setCv(cv.getOriginalFilename());
+            demande.setLettreMotivation(lettreMotivation.getOriginalFilename());
+            demande.setCinRecto(cinRecto.getOriginalFilename());
+            demande.setCinVerso(cinVerso.getOriginalFilename());
+            demande.setPhoto(photo.getOriginalFilename());
+
+            DemandeStage nouvelleDemande = service.creerDemande(demande);
+            return ResponseEntity.ok(nouvelleDemande);
+
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
+        }
     }
 
+    /**
+     * Récupérer toutes les demandes (pour l'admin).
+     */
     @GetMapping
     public ResponseEntity<List<DemandeStage>> getToutesDemandes() {
         return ResponseEntity.ok(service.toutesLesDemandes());
     }
 
+    /**
+     * Récupérer une demande par son ID.
+     */
     @GetMapping("/{id}")
     public ResponseEntity<DemandeStage> getDemandeParId(@PathVariable Long id) {
         return service.trouverParId(id)
-            .map(ResponseEntity::ok)
-            .orElse(ResponseEntity.notFound().build());
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Suivre une demande en utilisant l'email (pour l'utilisateur).
+     */
+    @GetMapping("/suivi")
+    public ResponseEntity<List<DemandeStage>> suiviDemande(@RequestParam String email) {
+        List<DemandeStage> demandes = service.trouverParEmail(email);
+        if (demandes.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(demandes);
     }
 }

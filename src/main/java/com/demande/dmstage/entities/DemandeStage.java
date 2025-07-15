@@ -21,7 +21,7 @@ public class DemandeStage {
     private LocalDate dateDebut;
     private String duree;
 
-    // Champs pour les fichiers (on stocke généralement les noms ou chemins)
+    // Champs pour les fichiers
     private String conventionStage;
     private String demandeStage;
     private String cv;
@@ -63,8 +63,6 @@ public class DemandeStage {
 
     public String getAdresseDomicile() { return adresseDomicile; }
     public void setAdresseDomicile(String adresseDomicile) { this.adresseDomicile = adresseDomicile; }
-
-    ublic void setDescription(String description) { this.description = description; }
 
     public String getTypeStage() { return typeStage; }
     public void setTypeStage(String typeStage) { this.typeStage = typeStage; }

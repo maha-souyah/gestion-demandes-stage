@@ -1,0 +1,23 @@
+<input type="email" id="emailSuivi" placeholder="Votre email">
+<button onclick="suivre()">Suivre ma demande</button>
+
+<div id="resultat"></div>
+
+<script>
+function suivre() {
+  const email = document.getElementById('emailSuivi').value;
+  fetch(`http://localhost:8080/api/demandes/suivi?email=${encodeURIComponent(email)}`)
+    .then(res => {
+      if (!res.ok) throw new Error("Aucune demande trouvée !");
+      return res.json();
+    })
+    .then(demandes => {
+      const div = document.getElementById('resultat');
+      div.innerHTML = "";
+      demandes.forEach(d => {
+        div.innerHTML += `<p>Nom: ${d.nom} | Statut: ${d.statut}</p>`;
+      });
+    })
+    .catch(err => alert(err.message));
+}
+</script>
