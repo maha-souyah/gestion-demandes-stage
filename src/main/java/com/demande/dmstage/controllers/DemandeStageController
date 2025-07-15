@@ -1,0 +1,37 @@
+package com.demande.dmstage.controllers;
+
+import com.demande.dmstage.entities.DemandeStage;
+import com.demande.dmstage.services.DemandeStageService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/demandes")
+public class DemandeStageController {
+
+    private final DemandeStageService service;
+
+    public DemandeStageController(DemandeStageService service) {
+        this.service = service;
+    }
+
+    @PostMapping
+    public ResponseEntity<DemandeStage> creerDemande(@RequestBody DemandeStage demande) {
+        DemandeStage nouvelleDemande = service.creerDemande(demande);
+        return ResponseEntity.ok(nouvelleDemande);
+    }
+
+    @GetMapping
+    public ResponseEntity<List<DemandeStage>> getToutesDemandes() {
+        return ResponseEntity.ok(service.toutesLesDemandes());
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<DemandeStage> getDemandeParId(@PathVariable Long id) {
+        return service.trouverParId(id)
+            .map(ResponseEntity::ok)
+            .orElse(ResponseEntity.notFound().build());
+    }
+}
