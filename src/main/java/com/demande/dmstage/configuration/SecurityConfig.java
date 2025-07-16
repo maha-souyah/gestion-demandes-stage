@@ -4,41 +4,40 @@ import com.demande.dmstage.services.CustomUserDetailsService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 @Configuration
-public class SecurityConfig {
+@EnableWebSecurity
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
     private final CustomUserDetailsService customUserDetailsService;
 
-    // Injection de notre service UserDetailsService personnalisé
     public SecurityConfig(CustomUserDetailsService customUserDetailsService) {
         this.customUserDetailsService = customUserDetailsService;
     }
 
-    @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
         http
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/demandes/**").authenticated()
+            .authorizeRequests()
+                .antMatchers("/api/demandes/**").authenticated()
                 .anyRequest().permitAll()
-            )
-            .formLogin(form -> form
-                .loginPage("/login")          
-                .permitAll()                  
-                .defaultSuccessUrl("/", true) 
-                .failureUrl("/login?error")   
-            )
-            .logout(logout -> logout
-                .logoutUrl("/logout")
-                .logoutSuccessUrl("/login?logout")  
+            .and()
+            .formLogin()
+                .loginPage("/login")
                 .permitAll()
-            )
-            .userDetailsService(customUserDetailsService); // Spécifie d'utiliser notre service
-
-        return http.build();
+                .defaultSuccessUrl("/", true)
+                .failureUrl("/login?error")
+            .and()
+            .logout()
+                .logoutUrl("/logout")
+                .logoutSuccessUrl("/login?logout")
+                .permitAll()
+            .and()
+            .userDetailsService(customUserDetailsService);
     }
 
     @Bean

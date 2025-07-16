@@ -34,4 +34,7 @@ public class DemandeStageService {
         demande.setStatut(statut);
         return repository.save(demande);
     }
+    public List<DemandeStage> trouverParEmail(String email) {
+    return repository.findByEmail(email);
+}
 }

@@ -1,6 +1,6 @@
 package com.demande.dmstage.entities;
 
-import jakarta.persistence.*;
+import javax.persistence.*;
 
 @Entity
 public class Utilisateur {
