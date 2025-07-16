@@ -18,9 +18,6 @@ public class DemandeStageController {
         this.service = service;
     }
 
-    /**
-     * Créer une nouvelle demande de stage (avec fichiers).
-     */
     @PostMapping
     public ResponseEntity<DemandeStage> creerDemande(
             @ModelAttribute DemandeStage demande,
@@ -33,9 +30,6 @@ public class DemandeStageController {
             @RequestParam("photo") MultipartFile photo
     ) {
         try {
-            // Ici, on met juste les noms des fichiers.
-            // Si tu veux enregistrer physiquement les fichiers, on ajoutera une logique dans le service.
-
             demande.setConventionStage(conventionStage.getOriginalFilename());
             demande.setDemandeStage(demandeStage.getOriginalFilename());
             demande.setCv(cv.getOriginalFilename());
@@ -52,17 +46,11 @@ public class DemandeStageController {
         }
     }
 
-    /**
-     * Récupérer toutes les demandes (pour l'admin).
-     */
     @GetMapping
     public ResponseEntity<List<DemandeStage>> getToutesDemandes() {
         return ResponseEntity.ok(service.toutesLesDemandes());
     }
 
-    /**
-     * Récupérer une demande par son ID.
-     */
     @GetMapping("/{id}")
     public ResponseEntity<DemandeStage> getDemandeParId(@PathVariable Long id) {
         return service.trouverParId(id)
@@ -70,9 +58,6 @@ public class DemandeStageController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    /**
-     * Suivre une demande en utilisant l'email (pour l'utilisateur).
-     */
     @GetMapping("/suivi")
     public ResponseEntity<List<DemandeStage>> suiviDemande(@RequestParam String email) {
         List<DemandeStage> demandes = service.trouverParEmail(email);

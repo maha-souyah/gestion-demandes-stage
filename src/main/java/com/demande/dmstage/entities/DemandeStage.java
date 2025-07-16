@@ -18,10 +18,10 @@ public class DemandeStage {
     private String cin;
     private String adresseDomicile;
     private String typeStage;
-    private LocalDate dateDebut;
-    private String duree;
 
-    // Champs pour les fichiers
+    private LocalDate dateDebut;
+
+    private String duree;
     private String conventionStage;
     private String demandeStage;
     private String cv;
@@ -29,7 +29,6 @@ public class DemandeStage {
     private String cinRecto;
     private String cinVerso;
     private String photo;
-
     private String statut;
     private LocalDate dateDemande;
 
@@ -38,7 +37,7 @@ public class DemandeStage {
         this.statut = "EN_ATTENTE";
     }
 
-    // Getters et setters
+    // Getters & Setters
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }

@@ -3,40 +3,34 @@ package com.demande.dmstage.controllers;
 import com.demande.dmstage.entities.Utilisateur;
 import com.demande.dmstage.services.UtilisateurService;
 import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.ui.Model;
 
 @Controller
-public class LoginController {
+public class UtilisateurController {
 
     private final UtilisateurService utilisateurService;
 
-    public LoginController(UtilisateurService utilisateurService) {
+    public UtilisateurController(UtilisateurService utilisateurService) {
         this.utilisateurService = utilisateurService;
     }
 
-    @GetMapping("/login")
-    public String login() {
-        return "login";  // login.html
-    }
-
-    @GetMapping("/inscription")
-    public String inscriptionForm(Model model) {
+    @GetMapping("/register")
+    public String showRegistrationForm(Model model) {
         model.addAttribute("utilisateur", new Utilisateur());
-        return "inscription"; // inscription.html
+        return "inscription";  // ici on retourne inscription.html
     }
 
-    @PostMapping("/inscription")
-    public String inscriptionSubmit(@ModelAttribute Utilisateur utilisateur, Model model) {
+    @PostMapping("/register")
+    public String processRegistration(@ModelAttribute Utilisateur utilisateur, Model model) {
         try {
             utilisateurService.creerCompte(utilisateur);
-            return "redirect:/login?inscriptionReussie";
+            return "redirect:/login?registerSuccess";
         } catch (Exception e) {
             model.addAttribute("error", "Email déjà utilisé");
             return "inscription";
         }
     }
 }
-

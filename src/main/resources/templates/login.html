@@ -1,29 +1,32 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" lang="fr">
-<head>
-    <meta charset="UTF-8" />
-    <title>Connexion</title>
-</head>
+<html xmlns:th="http://www.thymeleaf.org">
+<head><title>Connexion</title></head>
 <body>
-    <h1>Page de connexion</h1>
+<h2>Connexion</h2>
 
-    <form th:action="@{/login}" method="post">
-        <label for="username">Nom d'utilisateur :</label>
-        <input type="text" id="username" name="username" /><br/>
+<form th:action="@{/login}" method="post">
+    <label>Email :</label>
+    <input type="text" name="username" required />
+    <br/>
+    <label>Mot de passe :</label>
+    <input type="password" name="password" required />
+    <br/>
+    <button type="submit">Se connecter</button>
+</form>
 
-        <label for="password">Mot de passe :</label>
-        <input type="password" id="password" name="password" /><br/>
-  <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
+<p><a href="/inscription">Créer un compte</a></p>
 
-        <button type="submit">Se connecter</button>
-    </form>
+<div th:if="${param.error}">
+    <p style="color:red">Email ou mot de passe invalide</p>
+</div>
 
-    <p th:if="${param.error}">
-        Nom d’utilisateur ou mot de passe incorrect.
-    </p>
+<div th:if="${param.logout}">
+    <p style="color:green">Vous êtes déconnecté</p>
+</div>
 
-    <p th:if="${param.logout}">
-        Vous avez été déconnecté avec succès.
-    </p>
+<div th:if="${param.inscriptionReussie}">
+    <p style="color:green">Inscription réussie, vous pouvez vous connecter</p>
+</div>
+
 </body>
 </html>
