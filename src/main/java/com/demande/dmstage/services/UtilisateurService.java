@@ -2,28 +2,38 @@ package com.demande.dmstage.services;
 
 import com.demande.dmstage.entities.Utilisateur;
 import com.demande.dmstage.repositories.UtilisateurRepository;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
 
 @Service
-public class UtilisateurService implements UserDetailsService {
+public class UtilisateurService {
 
     private final UtilisateurRepository repository;
-    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final PasswordEncoder passwordEncoder;
 
-    public UtilisateurService(UtilisateurRepository repository) {
+    public UtilisateurService(UtilisateurRepository repository, PasswordEncoder passwordEncoder) {
         this.repository = repository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     public Utilisateur creerCompte(Utilisateur utilisateur) {
+        // Vérifier si l'email existe déjà
+        Optional<Utilisateur> existant = repository.findByEmail(utilisateur.getEmail());
+        if (existant.isPresent()) {
+            throw new RuntimeException("Email déjà utilisé");
+        }
+        
+        // Encoder le mot de passe
         utilisateur.setMotDePasse(passwordEncoder.encode(utilisateur.getMotDePasse()));
+        
+        // Par défaut, le rôle est USER (sauf si spécifié autrement)
+        if (utilisateur.getRole() == null) {
+            utilisateur.setRole(Utilisateur.Role.USER);
+        }
+        
         return repository.save(utilisateur);
     }
 
@@ -31,24 +41,46 @@ public class UtilisateurService implements UserDetailsService {
         Optional<Utilisateur> userOpt = repository.findByEmail(email);
         if (userOpt.isPresent()) {
             Utilisateur utilisateur = userOpt.get();
-            if (passwordEncoder.matches(motDePasse, utilisateur.getMotDePasse())) {
+            if (passwordEncoder.matches(motDePasse, utilisateur.getMotDePasse()) && utilisateur.getActif()) {
                 return Optional.of(utilisateur);
             }
         }
         return Optional.empty();
     }
 
-    // Cette méthode est appelée par Spring Security lors de la connexion
-    @Override
-    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        Utilisateur utilisateur = repository.findByEmail(email)
-                .orElseThrow(() -> new UsernameNotFoundException("Utilisateur non trouvé avec email : " + email));
+    public Optional<Utilisateur> trouverParEmail(String email) {
+        return repository.findByEmail(email);
+    }
 
-        // Ici on crée un UserDetails Spring Security à partir de ton Utilisateur
-        return new org.springframework.security.core.userdetails.User(
-                utilisateur.getEmail(),
-                utilisateur.getMotDePasse(),
-                List.of(new SimpleGrantedAuthority("ROLE_USER")) // ici on fixe un rôle USER
-        );
+    public Optional<Utilisateur> trouverParId(Long id) {
+        return repository.findById(id);
+    }
+
+    public List<Utilisateur> tousLesUtilisateurs() {
+        return repository.findAll();
+    }
+
+    public Utilisateur modifierRole(Long id, Utilisateur.Role nouveauRole) {
+        Utilisateur utilisateur = repository.findById(id)
+            .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
+        
+        utilisateur.setRole(nouveauRole);
+        return repository.save(utilisateur);
+    }
+
+    public Utilisateur activerDesactiverUtilisateur(Long id, Boolean actif) {
+        Utilisateur utilisateur = repository.findById(id)
+            .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
+        
+        utilisateur.setActif(actif);
+        return repository.save(utilisateur);
+    }
+
+    public long compterUtilisateurs() {
+        return repository.count();
+    }
+
+    public long compterUtilisateursParRole(Utilisateur.Role role) {
+        return repository.countByRole(role);
     }
 }

@@ -1,25 +1,64 @@
 package com.demande.dmstage.entities;
 
 import javax.persistence.*;
+import javax.validation.constraints.Email;
+import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.Size;
+import java.time.LocalDateTime;
 
 @Entity
+@Table(name = "utilisateurs")
 public class Utilisateur {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @NotBlank(message = "Le nom est obligatoire")
+    @Size(min = 2, max = 50, message = "Le nom doit contenir entre 2 et 50 caractères")
+    @Column(nullable = false)
     private String nom;
 
-    @Column(unique = true)
+    @NotBlank(message = "L'email est obligatoire")
+    @Email(message = "Format d'email invalide")
+    @Column(unique = true, nullable = false)
     private String email;
 
+    @NotBlank(message = "Le mot de passe est obligatoire")
+    @Size(min = 6, message = "Le mot de passe doit contenir au moins 6 caractères")
+    @Column(nullable = false)
     private String motDePasse;
 
-    // Constructeur vide
-    public Utilisateur() {}
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Role role = Role.USER;
 
-    // Getters et setters
+    @Column(nullable = false)
+    private Boolean actif = true;
+
+    @Column(nullable = false)
+    private LocalDateTime dateCreation;
+
+    // Enum pour les rôles
+    public enum Role {
+        USER, ADMIN
+    }
+
+    // Constructeurs
+    public Utilisateur() {
+        this.dateCreation = LocalDateTime.now();
+        this.role = Role.USER;
+        this.actif = true;
+    }
+
+    public Utilisateur(String nom, String email, String motDePasse) {
+        this();
+        this.nom = nom;
+        this.email = email;
+        this.motDePasse = motDePasse;
+    }
+
+    // Getters et Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -31,4 +70,13 @@ public class Utilisateur {
 
     public String getMotDePasse() { return motDePasse; }
     public void setMotDePasse(String motDePasse) { this.motDePasse = motDePasse; }
+
+    public Role getRole() { return role; }
+    public void setRole(Role role) { this.role = role; }
+
+    public Boolean getActif() { return actif; }
+    public void setActif(Boolean actif) { this.actif = actif; }
+
+    public LocalDateTime getDateCreation() { return dateCreation; }
+    public void setDateCreation(LocalDateTime dateCreation) { this.dateCreation = dateCreation; }
 }

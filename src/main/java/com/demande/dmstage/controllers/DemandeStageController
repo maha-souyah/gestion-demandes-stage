@@ -6,7 +6,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/demandes")
@@ -19,7 +21,7 @@ public class DemandeStageController {
     }
 
     @PostMapping
-    public ResponseEntity<DemandeStage> creerDemande(
+    public ResponseEntity<Map<String, Object>> creerDemande(
             @ModelAttribute DemandeStage demande,
             @RequestParam("convention_stage") MultipartFile conventionStage,
             @RequestParam("demande_stage") MultipartFile demandeStage,
@@ -29,7 +31,18 @@ public class DemandeStageController {
             @RequestParam("cin_verso") MultipartFile cinVerso,
             @RequestParam("photo") MultipartFile photo
     ) {
+        Map<String, Object> response = new HashMap<>();
+        
         try {
+            // Validation des fichiers
+            if (conventionStage.isEmpty() || demandeStage.isEmpty() || cv.isEmpty() || 
+                lettreMotivation.isEmpty() || cinRecto.isEmpty() || cinVerso.isEmpty() || photo.isEmpty()) {
+                response.put("success", false);
+                response.put("message", "Tous les fichiers sont requis");
+                return ResponseEntity.badRequest().body(response);
+            }
+
+            // Stockage des noms de fichiers
             demande.setConventionStage(conventionStage.getOriginalFilename());
             demande.setDemandeStage(demandeStage.getOriginalFilename());
             demande.setCv(cv.getOriginalFilename());
@@ -39,31 +52,100 @@ public class DemandeStageController {
             demande.setPhoto(photo.getOriginalFilename());
 
             DemandeStage nouvelleDemande = service.creerDemande(demande);
-            return ResponseEntity.ok(nouvelleDemande);
+            
+            response.put("success", true);
+            response.put("message", "Demande créée avec succès");
+            response.put("data", nouvelleDemande);
+            
+            return ResponseEntity.ok(response);
 
         } catch (Exception e) {
-            return ResponseEntity.badRequest().build();
+            response.put("success", false);
+            response.put("message", "Erreur lors de la création de la demande: " + e.getMessage());
+            return ResponseEntity.badRequest().body(response);
         }
     }
 
     @GetMapping
-    public ResponseEntity<List<DemandeStage>> getToutesDemandes() {
-        return ResponseEntity.ok(service.toutesLesDemandes());
+    public ResponseEntity<Map<String, Object>> getToutesDemandes() {
+        Map<String, Object> response = new HashMap<>();
+        
+        try {
+            List<DemandeStage> demandes = service.toutesLesDemandes();
+            response.put("success", true);
+            response.put("data", demandes);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("message", "Erreur lors de la récupération des demandes");
+            return ResponseEntity.badRequest().body(response);
+        }
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<DemandeStage> getDemandeParId(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> getDemandeParId(@PathVariable Long id) {
+        Map<String, Object> response = new HashMap<>();
+        
         return service.trouverParId(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+                .map(demande -> {
+                    response.put("success", true);
+                    response.put("data", demande);
+                    return ResponseEntity.ok(response);
+                })
+                .orElseGet(() -> {
+                    response.put("success", false);
+                    response.put("message", "Demande non trouvée");
+                    return ResponseEntity.notFound().build();
+                });
     }
 
     @GetMapping("/suivi")
-    public ResponseEntity<List<DemandeStage>> suiviDemande(@RequestParam String email) {
-        List<DemandeStage> demandes = service.trouverParEmail(email);
-        if (demandes.isEmpty()) {
-            return ResponseEntity.notFound().build();
+    public ResponseEntity<Map<String, Object>> suiviDemande(@RequestParam String email) {
+        Map<String, Object> response = new HashMap<>();
+        
+        try {
+            List<DemandeStage> demandes = service.trouverParEmail(email);
+            if (demandes.isEmpty()) {
+                response.put("success", false);
+                response.put("message", "Aucune demande trouvée pour cet email");
+                return ResponseEntity.notFound().build();
+            }
+            
+            response.put("success", true);
+            response.put("data", demandes);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("message", "Erreur lors de la recherche");
+            return ResponseEntity.badRequest().body(response);
         }
-        return ResponseEntity.ok(demandes);
+    }
+
+    @PutMapping("/{id}/statut")
+    public ResponseEntity<Map<String, Object>> modifierStatut(
+            @PathVariable Long id, 
+            @RequestBody Map<String, String> statutData) {
+        Map<String, Object> response = new HashMap<>();
+        
+        try {
+            String statut = statutData.get("statut");
+            String commentaire = statutData.get("commentaire");
+            
+            DemandeStage demande = service.modifierStatut(id, statut);
+            if (commentaire != null && !commentaire.trim().isEmpty()) {
+                demande.setCommentaire(commentaire);
+                demande = service.creerDemande(demande);
+            }
+            
+            response.put("success", true);
+            response.put("message", "Statut modifié avec succès");
+            response.put("data", demande);
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("message", "Erreur lors de la modification du statut");
+            return ResponseEntity.badRequest().body(response);
+        }
     }
 }
