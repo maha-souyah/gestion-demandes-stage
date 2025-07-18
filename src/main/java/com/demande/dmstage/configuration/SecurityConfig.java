@@ -36,12 +36,13 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             .and()
             .authorizeRequests()
-                // Endpoints publics
+                // Endpoints publics - AJOUT de create-admin
                 .antMatchers("/api/auth/**").permitAll()
                 .antMatchers("/api/demandes/suivi").permitAll()
                 // Endpoints admin
                 .antMatchers("/api/admin/**").hasRole("ADMIN")
                 // Endpoints utilisateur authentifié
+                .antMatchers("/api/demandes/mes-demandes").hasAnyRole("USER", "ADMIN")
                 .antMatchers("/api/demandes/**").hasAnyRole("USER", "ADMIN")
                 .anyRequest().authenticated()
             .and()

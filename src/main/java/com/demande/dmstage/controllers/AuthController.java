@@ -27,7 +27,7 @@ public class AuthController {
         Map<String, Object> response = new HashMap<>();
         
         try {
-            // Par défaut, tous les nouveaux utilisateurs sont des USER
+            // Tous les nouveaux utilisateurs sont des USER
             utilisateur.setRole(Utilisateur.Role.USER);
             
             Utilisateur nouvelUtilisateur = utilisateurService.creerCompte(utilisateur);
@@ -51,24 +51,37 @@ public class AuthController {
     public ResponseEntity<Map<String, Object>> login(@RequestBody Map<String, String> credentials) {
         Map<String, Object> response = new HashMap<>();
         
-        String email = credentials.get("email");
-        String motDePasse = credentials.get("motDePasse");
-        
-        Optional<Utilisateur> utilisateur = utilisateurService.authentifier(email, motDePasse);
-        
-        if (utilisateur.isPresent()) {
-            response.put("success", true);
-            response.put("message", "Connexion réussie");
-            response.put("utilisateur", Map.of(
-                "id", utilisateur.get().getId(),
-                "nom", utilisateur.get().getNom(),
-                "email", utilisateur.get().getEmail(),
-                "role", utilisateur.get().getRole().name()
-            ));
-            return ResponseEntity.ok(response);
-        } else {
+        try {
+            String email = credentials.get("email");
+            String motDePasse = credentials.get("motDePasse");
+            
+            System.out.println("=== TENTATIVE CONNEXION ===");
+            System.out.println("Email: " + email);
+            
+            Optional<Utilisateur> utilisateur = utilisateurService.authentifier(email, motDePasse);
+            
+            if (utilisateur.isPresent()) {
+                System.out.println("Connexion réussie pour: " + utilisateur.get().getNom() + " (" + utilisateur.get().getRole() + ")");
+                
+                response.put("success", true);
+                response.put("message", "Connexion réussie");
+                response.put("utilisateur", Map.of(
+                    "id", utilisateur.get().getId(),
+                    "nom", utilisateur.get().getNom(),
+                    "email", utilisateur.get().getEmail(),
+                    "role", utilisateur.get().getRole().name()
+                ));
+                return ResponseEntity.ok(response);
+            } else {
+                System.out.println("Échec de connexion pour: " + email);
+                response.put("success", false);
+                response.put("message", "Email ou mot de passe invalide");
+                return ResponseEntity.badRequest().body(response);
+            }
+        } catch (Exception e) {
+            System.out.println("ERREUR lors de la connexion: " + e.getMessage());
             response.put("success", false);
-            response.put("message", "Email ou mot de passe invalide");
+            response.put("message", "Erreur lors de la connexion");
             return ResponseEntity.badRequest().body(response);
         }
     }
@@ -77,24 +90,30 @@ public class AuthController {
     public ResponseEntity<Map<String, Object>> getProfile() {
         Map<String, Object> response = new HashMap<>();
         
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        String email = auth.getName();
-        
-        Optional<Utilisateur> utilisateur = utilisateurService.trouverParEmail(email);
-        
-        if (utilisateur.isPresent()) {
-            response.put("success", true);
-            response.put("utilisateur", Map.of(
-                "id", utilisateur.get().getId(),
-                "nom", utilisateur.get().getNom(),
-                "email", utilisateur.get().getEmail(),
-                "role", utilisateur.get().getRole().name()
-            ));
-            return ResponseEntity.ok(response);
-        } else {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            String email = auth.getName();
+            
+            Optional<Utilisateur> utilisateur = utilisateurService.trouverParEmail(email);
+            
+            if (utilisateur.isPresent()) {
+                response.put("success", true);
+                response.put("utilisateur", Map.of(
+                    "id", utilisateur.get().getId(),
+                    "nom", utilisateur.get().getNom(),
+                    "email", utilisateur.get().getEmail(),
+                    "role", utilisateur.get().getRole().name()
+                ));
+                return ResponseEntity.ok(response);
+            } else {
+                response.put("success", false);
+                response.put("message", "Utilisateur non trouvé");
+                return ResponseEntity.notFound().build();
+            }
+        } catch (Exception e) {
             response.put("success", false);
-            response.put("message", "Utilisateur non trouvé");
-            return ResponseEntity.notFound().build();
+            response.put("message", "Erreur lors de la récupération du profil");
+            return ResponseEntity.badRequest().body(response);
         }
     }
 }
