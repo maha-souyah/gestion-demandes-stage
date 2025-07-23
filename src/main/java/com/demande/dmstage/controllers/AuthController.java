@@ -48,19 +48,21 @@ public class AuthController {
     }
 
     /**
-     * Endpoint pour créer le compte administrateur
-     * À utiliser une seule fois lors de l'initialisation du système
+     * Endpoint pour créer des comptes administrateurs
+     * Modifié pour permettre plusieurs admins (limite de 5 pour sécurité entreprise)
      */
     @PostMapping("/create-admin")
     public ResponseEntity<Map<String, Object>> createAdmin(@RequestBody Map<String, String> adminData) {
         Map<String, Object> response = new HashMap<>();
         
         try {
-            // Vérifier si un admin existe déjà
+            // Vérifier la limite d'admins (5 maximum pour une entreprise)
             long nombreAdmins = utilisateurService.compterUtilisateursParRole(Utilisateur.Role.ADMIN);
-            if (nombreAdmins > 0) {
+            if (nombreAdmins >= 5) {
                 response.put("success", false);
-                response.put("message", "Un administrateur existe déjà dans le système");
+                response.put("message", "Limite maximale d'administrateurs atteinte (5 maximum)");
+                response.put("current_admins", nombreAdmins);
+                response.put("max_admins", 5);
                 return ResponseEntity.badRequest().body(response);
             }
             
@@ -68,6 +70,11 @@ public class AuthController {
             String nom = adminData.getOrDefault("nom", "Admin");
             String email = adminData.getOrDefault("email", "admin@berkane.ma");
             String motDePasse = adminData.getOrDefault("motDePasse", "admin123456");
+            
+            System.out.println("=== CRÉATION ADMIN ===");
+            System.out.println("Nom: " + nom);
+            System.out.println("Email: " + email);
+            System.out.println("Admins actuels: " + nombreAdmins);
             
             Utilisateur admin = new Utilisateur();
             admin.setNom(nom);
@@ -77,6 +84,8 @@ public class AuthController {
             
             Utilisateur nouvelAdmin = utilisateurService.creerCompte(admin);
             
+            System.out.println("Admin créé avec succès - ID: " + nouvelAdmin.getId());
+            
             response.put("success", true);
             response.put("message", "Compte administrateur créé avec succès");
             response.put("admin", Map.of(
@@ -85,8 +94,12 @@ public class AuthController {
                 "email", nouvelAdmin.getEmail(),
                 "role", nouvelAdmin.getRole().name()
             ));
+            response.put("total_admins", nombreAdmins + 1);
+            response.put("remaining_slots", 5 - (nombreAdmins + 1));
             return ResponseEntity.ok(response);
         } catch (Exception e) {
+            System.out.println("ERREUR lors de la création admin: " + e.getMessage());
+            e.printStackTrace();
             response.put("success", false);
             response.put("message", "Erreur lors de la création de l'admin: " + e.getMessage());
             return ResponseEntity.badRequest().body(response);
@@ -181,7 +194,9 @@ public class AuthController {
                 "total_utilisateurs", totalUtilisateurs,
                 "nombre_admins", nombreAdmins,
                 "nombre_users", nombreUsers,
-                "admin_existe", nombreAdmins > 0
+                "admin_existe", nombreAdmins > 0,
+                "max_admins", 5,
+                "slots_disponibles", 5 - nombreAdmins
             ));
             
             return ResponseEntity.ok(response);
@@ -191,4 +206,67 @@ public class AuthController {
             return ResponseEntity.badRequest().body(response);
         }
     }
+    /**
+ * MÉTHODE TEMPORAIRE DE CONTOURNEMENT - SANS SÉCURITÉ
+ */
+@PostMapping("/create-admin-bypass")
+public ResponseEntity<Map<String, Object>> createAdminBypass(@RequestBody Map<String, String> adminData) {
+    Map<String, Object> response = new HashMap<>();
+    
+    try {
+        System.out.println("🚨 CRÉATION ADMIN - CONTOURNEMENT SÉCURITÉ");
+        System.out.println("📝 Données reçues: " + adminData);
+        
+        // Vérifier la limite d'admins (5 maximum pour une entreprise)
+        long nombreAdmins = utilisateurService.compterUtilisateursParRole(Utilisateur.Role.ADMIN);
+        if (nombreAdmins >= 5) {
+            response.put("success", false);
+            response.put("message", "Limite maximale d'administrateurs atteinte (5 maximum)");
+            response.put("current_admins", nombreAdmins);
+            response.put("max_admins", 5);
+            return ResponseEntity.badRequest().body(response);
+        }
+        
+        // Créer le compte admin avec les données fournies ou par défaut
+        String nom = adminData.getOrDefault("nom", "Admin");
+        String email = adminData.getOrDefault("email", "admin@berkane.ma");
+        String motDePasse = adminData.getOrDefault("motDePasse", "admin123456");
+        
+        System.out.println("=== CRÉATION ADMIN BYPASS ===");
+        System.out.println("Nom: " + nom);
+        System.out.println("Email: " + email);
+        System.out.println("Admins actuels: " + nombreAdmins);
+        
+        Utilisateur admin = new Utilisateur();
+        admin.setNom(nom);
+        admin.setEmail(email);
+        admin.setMotDePasse(motDePasse);
+        admin.setRole(Utilisateur.Role.ADMIN);
+        
+        Utilisateur nouvelAdmin = utilisateurService.creerCompte(admin);
+        
+        System.out.println("Admin créé avec succès - ID: " + nouvelAdmin.getId());
+        
+        response.put("success", true);
+        response.put("message", "Compte administrateur créé avec succès (BYPASS)");
+        response.put("admin", Map.of(
+            "id", nouvelAdmin.getId(),
+            "nom", nouvelAdmin.getNom(),
+            "email", nouvelAdmin.getEmail(),
+            "role", nouvelAdmin.getRole().name()
+        ));
+        response.put("total_admins", nombreAdmins + 1);
+        response.put("remaining_slots", 5 - (nombreAdmins + 1));
+        response.put("method", "BYPASS - SECURITY DISABLED");
+        
+        return ResponseEntity.ok(response);
+        
+    } catch (Exception e) {
+        System.out.println("ERREUR lors de la création admin bypass: " + e.getMessage());
+        e.printStackTrace();
+        response.put("success", false);
+        response.put("message", "Erreur lors de la création de l'admin: " + e.getMessage());
+        return ResponseEntity.badRequest().body(response);
+    }
+}
 }

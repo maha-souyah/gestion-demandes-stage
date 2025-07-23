@@ -690,6 +690,7 @@ if (estAuthentifie) {
             System.out.println("Fichier Excel converti en bytes: " + excelBytes.length + " bytes");
             
             return excelBytes;
+            
         }
     }
 }
