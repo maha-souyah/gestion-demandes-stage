@@ -16,6 +16,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
 
+@SuppressWarnings({"deprecation", "removal"}) // Ignore tous les avertissements Spring Boot 2.7
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig extends WebSecurityConfigurerAdapter {
@@ -26,6 +27,7 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
         this.customUserDetailsService = customUserDetailsService;
     }
 
+    @SuppressWarnings("deprecation") // Pour authorizeRequests()
     @Override
     protected void configure(HttpSecurity http) throws Exception {
         http
@@ -35,15 +37,24 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
             .sessionManagement()
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             .and()
-            .authorizeRequests()
-                // Endpoints publics - AJOUT de create-admin
-                .antMatchers("/api/auth/**").permitAll()
+            .authorizeRequests() // Méthode dépréciée mais compatible Spring Boot 2.7
+                // Endpoints publics
+                .antMatchers("/api/auth/register").permitAll()
+                .antMatchers("/api/auth/login").permitAll()
+                .antMatchers("/api/auth/create-admin").permitAll()
+                .antMatchers("/api/auth/system-status").permitAll()
                 .antMatchers("/api/demandes/suivi").permitAll()
-                // Endpoints admin
+                
+                // Endpoints admin uniquement
                 .antMatchers("/api/admin/**").hasRole("ADMIN")
-                // Endpoints utilisateur authentifié
+                
+                // Endpoints utilisateur authentifié (USER ou ADMIN)
+                .antMatchers("/api/auth/profile").hasAnyRole("USER", "ADMIN")
                 .antMatchers("/api/demandes/mes-demandes").hasAnyRole("USER", "ADMIN")
+                .antMatchers("/api/demandes/export/excel").hasAnyRole("USER", "ADMIN")
                 .antMatchers("/api/demandes/**").hasAnyRole("USER", "ADMIN")
+                
+                // Tout le reste nécessite une authentification
                 .anyRequest().authenticated()
             .and()
             .httpBasic();

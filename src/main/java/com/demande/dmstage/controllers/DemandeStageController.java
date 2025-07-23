@@ -7,6 +7,8 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -28,54 +30,66 @@ public class DemandeStageController {
         this.service = service;
     }
 
+    /**
+     * SUIVI PUBLIC ET SÉCURISÉ PAR EMAIL
+     * - Sans authentification : suivi public (n'importe qui peut suivre avec un email)
+     * - Avec authentification : suivi sécurisé (utilisateur ne peut suivre que ses demandes, admin peut tout suivre)
+     */
     @GetMapping("/suivi")
-    public ResponseEntity<Map<String, Object>> suiviDemande(@RequestParam String email) {
+    public ResponseEntity<Map<String, Object>> suiviDemandeParEmail(@RequestParam String email) {
         Map<String, Object> response = new HashMap<>();
         
         try {
-            System.out.println("=== SUIVI PAR EMAIL - VERSION DEBUG ===");
-            System.out.println("Email reçu: '" + email + "'");
+            System.out.println("=== SUIVI PAR EMAIL ===");
+            System.out.println("Email recherché: '" + email + "'");
             
-            // Récupérer TOUTES les demandes pour debug
-            List<DemandeStage> toutesLesDemandes = service.toutesLesDemandes();
-            System.out.println("Total demandes en base: " + toutesLesDemandes.size());
-            
-            for (DemandeStage d : toutesLesDemandes) {
-                System.out.println("Demande ID " + d.getId() + ": email='" + d.getEmail() + "'");
-            }
-            
-            // Chercher avec la méthode du service
-            List<DemandeStage> demandes = service.trouverParEmail(email);
-            System.out.println("Résultat service.trouverParEmail: " + demandes.size());
-            
-            // Chercher manuellement
-            List<DemandeStage> demandesManuelles = new ArrayList<>();
-            for (DemandeStage d : toutesLesDemandes) {
-                if (d.getEmail().equals(email)) {
-                    demandesManuelles.add(d);
+          // Vérifier si l'utilisateur est authentifié
+Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+boolean estAuthentifie = auth != null && auth.isAuthenticated() && 
+                       auth.getName() != null && !auth.getName().equals("anonymousUser");
+
+String modeAcces;
+
+if (estAuthentifie) {
+    // MODE SÉCURISÉ - Utilisateur authentifié
+    String emailUtilisateur = auth.getName(); // Maintenant sûr car vérifié au-dessus
+    boolean estAdmin = auth.getAuthorities().stream()
+        .anyMatch(grantedAuthority -> grantedAuthority.getAuthority().equals("ROLE_ADMIN"));
+    
+    System.out.println("Utilisateur authentifié: " + emailUtilisateur);
+    System.out.println("Est admin: " + estAdmin);
+                
+                // Vérifier les permissions
+                if (!estAdmin && !emailUtilisateur.equals(email)) {
+                    response.put("success", false);
+                    response.put("message", "Vous ne pouvez consulter que vos propres demandes");
+                    response.put("mode", "securise_refuse");
+                    return ResponseEntity.status(403).body(response);
                 }
-            }
-            System.out.println("Résultat recherche manuelle: " + demandesManuelles.size());
-            
-            if (demandes.isEmpty() && demandesManuelles.isEmpty()) {
-                response.put("success", false);
-                response.put("message", "Aucune demande trouvée pour cet email");
-                response.put("debug_info", Map.of(
-                    "email_recherche", email,
-                    "total_demandes", toutesLesDemandes.size(),
-                    "result_service", demandes.size(),
-                    "result_manuel", demandesManuelles.size()
-                ));
-                return ResponseEntity.ok(response);
+                
+                modeAcces = estAdmin ? "admin_securise" : "utilisateur_securise";
+            } else {
+                // MODE PUBLIC - Aucune authentification
+                modeAcces = "public";
+                System.out.println("Accès public - aucune authentification");
             }
             
-            // Utiliser le résultat qui marche
-            List<DemandeStage> resultatFinal = !demandes.isEmpty() ? demandes : demandesManuelles;
+            // Récupérer les demandes
+            List<DemandeStage> demandes = service.trouverParEmail(email);
+            System.out.println("Demandes trouvées: " + demandes.size());
             
             response.put("success", true);
-            response.put("data", resultatFinal);
-            response.put("type", "suivi_email");
-            response.put("total", resultatFinal.size());
+            response.put("data", demandes);
+            response.put("total", demandes.size());
+            response.put("mode_acces", modeAcces);
+            response.put("email_recherche", email);
+            
+            if (demandes.isEmpty()) {
+                response.put("message", "Aucune demande trouvée pour cet email");
+            } else {
+                response.put("message", demandes.size() + " demande(s) trouvée(s)");
+            }
+            
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
@@ -87,106 +101,59 @@ public class DemandeStageController {
         }
     }
 
-    @GetMapping("/debug-emails")
-    public ResponseEntity<Map<String, Object>> debugEmails() {
+    /**
+     * MES DEMANDES - Suivi via l'application (authentification requise)
+     * L'utilisateur voit seulement ses propres demandes
+     */
+    @GetMapping("/mes-demandes")
+    public ResponseEntity<Map<String, Object>> mesDemandes() {
         Map<String, Object> response = new HashMap<>();
         
         try {
-            System.out.println("=== DEBUG EMAILS ===");
+            System.out.println("=== MES DEMANDES (VIA APPLICATION) ===");
             
-            List<DemandeStage> toutesLesDemandes = service.toutesLesDemandes();
-            System.out.println("Total demandes: " + toutesLesDemandes.size());
+            // Récupérer l'utilisateur connecté
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             
-            List<Map<String, Object>> demandesDebug = new ArrayList<>();
-            
-            for (DemandeStage demande : toutesLesDemandes) {
-                Map<String, Object> demandeInfo = new HashMap<>();
-                demandeInfo.put("id", demande.getId());
-                demandeInfo.put("nom", demande.getNom());
-                demandeInfo.put("prenom", demande.getPrenom());
-                demandeInfo.put("email", demande.getEmail());
-                demandeInfo.put("email_length", demande.getEmail().length());
-                demandeInfo.put("email_trimmed", demande.getEmail().trim());
-                
-                System.out.println("Demande " + demande.getId() + ":");
-                System.out.println("  - Email brut: '" + demande.getEmail() + "'");
-                System.out.println("  - Email length: " + demande.getEmail().length());
-                System.out.println("  - Email trimmed: '" + demande.getEmail().trim() + "'");
-                
-                demandesDebug.add(demandeInfo);
-            }
-            
-            response.put("success", true);
-            response.put("demandes", demandesDebug);
-            response.put("total", toutesLesDemandes.size());
-            
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            System.out.println("ERREUR DEBUG: " + e.getMessage());
-            e.printStackTrace();
-            response.put("success", false);
-            response.put("message", "Erreur debug: " + e.getMessage());
-            return ResponseEntity.badRequest().body(response);
-        }
-    }
-    public ResponseEntity<Map<String, Object>> mesDemandes(
-            @RequestHeader("Authorization") String authHeader) {
-        Map<String, Object> response = new HashMap<>();
-        
-        try {
-            System.out.println("=== SUIVI VIA APPLICATION (AUTHENTIFIÉ) ===");
-            
-            // Récupérer l'utilisateur connecté depuis l'authentification
-            org.springframework.security.core.Authentication auth = 
-                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-            
-            if (auth == null || !auth.isAuthenticated()) {
+            if (auth == null || !auth.isAuthenticated() || auth.getName().equals("anonymousUser")) {
                 response.put("success", false);
-                response.put("message", "Utilisateur non authentifié");
+                response.put("message", "Authentification requise pour accéder à vos demandes");
                 return ResponseEntity.status(401).body(response);
             }
             
             String emailUtilisateur = auth.getName();
             System.out.println("Utilisateur connecté: " + emailUtilisateur);
             
-            // Récupérer les demandes de cet utilisateur
+            // Récupérer UNIQUEMENT les demandes de cet utilisateur
             List<DemandeStage> demandes = service.trouverParEmail(emailUtilisateur);
             System.out.println("Demandes trouvées pour " + emailUtilisateur + ": " + demandes.size());
             
-            if (demandes.isEmpty()) {
-                response.put("success", true);
-                response.put("message", "Vous n'avez soumis aucune demande de stage");
-                response.put("data", demandes);
-                response.put("total", 0);
-                response.put("type", "suivi_application");
-                response.put("utilisateur", emailUtilisateur);
-                return ResponseEntity.ok(response);
-            }
-            
-            // Ajouter des informations de suivi enrichies
             response.put("success", true);
-            response.put("message", "Vos demandes de stage");
+            response.put("message", demandes.isEmpty() ? 
+                "Vous n'avez soumis aucune demande de stage" : 
+                "Vos demandes de stage");
             response.put("data", demandes);
             response.put("total", demandes.size());
-            response.put("type", "suivi_application");
+            response.put("mode_acces", "application_authentifiee");
             response.put("utilisateur", emailUtilisateur);
             
             // Statistiques personnelles
-            Map<String, Object> statistiquesPersonnelles = new HashMap<>();
-            long enAttente = demandes.stream().filter(d -> "EN_ATTENTE".equals(d.getStatut())).count();
-            long acceptees = demandes.stream().filter(d -> "ACCEPTE".equals(d.getStatut())).count();
-            long refusees = demandes.stream().filter(d -> "REFUSE".equals(d.getStatut())).count();
-            
-            statistiquesPersonnelles.put("EN_ATTENTE", enAttente);
-            statistiquesPersonnelles.put("ACCEPTE", acceptees);
-            statistiquesPersonnelles.put("REFUSE", refusees);
-            response.put("mes_statistiques", statistiquesPersonnelles);
+            if (!demandes.isEmpty()) {
+                Map<String, Object> stats = new HashMap<>();
+                long enAttente = demandes.stream().filter(d -> "EN_ATTENTE".equals(d.getStatut())).count();
+                long acceptees = demandes.stream().filter(d -> "ACCEPTE".equals(d.getStatut())).count();
+                long refusees = demandes.stream().filter(d -> "REFUSE".equals(d.getStatut())).count();
+                
+                stats.put("EN_ATTENTE", enAttente);
+                stats.put("ACCEPTE", acceptees);
+                stats.put("REFUSE", refusees);
+                response.put("mes_statistiques", stats);
+            }
             
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
-            System.out.println("ERREUR lors du suivi via application: " + e.getMessage());
+            System.out.println("ERREUR lors de la récupération des demandes: " + e.getMessage());
             e.printStackTrace();
             response.put("success", false);
             response.put("message", "Erreur lors de la récupération de vos demandes: " + e.getMessage());
@@ -194,6 +161,10 @@ public class DemandeStageController {
         }
     }
 
+    /**
+     * CRÉATION D'UNE NOUVELLE DEMANDE DE STAGE
+     * Accessible à tous les utilisateurs authentifiés
+     */
     @PostMapping
     public ResponseEntity<Map<String, Object>> creerDemande(
             @RequestParam("nom") String nom,
@@ -217,7 +188,7 @@ public class DemandeStageController {
         Map<String, Object> response = new HashMap<>();
         
         try {
-            System.out.println("=== DEBUT CREATION DEMANDE ===");
+            System.out.println("=== CREATION DEMANDE ===");
             System.out.println("- Nom: " + nom);
             System.out.println("- Prénom: " + prenom);
             System.out.println("- Email: " + email);
@@ -233,6 +204,7 @@ public class DemandeStageController {
             demande.setTypeStage(typeStage);
             demande.setDuree(duree);
             
+            // Validation et parsing de la date
             try {
                 demande.setDateDebut(LocalDate.parse(dateDebut));
             } catch (Exception e) {
@@ -241,28 +213,14 @@ public class DemandeStageController {
                 return ResponseEntity.badRequest().body(response);
             }
             
-            String conventionName = (conventionStage != null && conventionStage.getOriginalFilename() != null) 
-                ? conventionStage.getOriginalFilename() : "convention_non_fourni.pdf";
-            String demandeName = (demandeStage != null && demandeStage.getOriginalFilename() != null) 
-                ? demandeStage.getOriginalFilename() : "demande_non_fourni.pdf";
-            String cvName = (cv != null && cv.getOriginalFilename() != null) 
-                ? cv.getOriginalFilename() : "cv_non_fourni.pdf";
-            String lettreName = (lettreMotivation != null && lettreMotivation.getOriginalFilename() != null) 
-                ? lettreMotivation.getOriginalFilename() : "lettre_non_fourni.pdf";
-            String cinRectoName = (cinRecto != null && cinRecto.getOriginalFilename() != null) 
-                ? cinRecto.getOriginalFilename() : "cin_recto_non_fourni.jpg";
-            String cinVersoName = (cinVerso != null && cinVerso.getOriginalFilename() != null) 
-                ? cinVerso.getOriginalFilename() : "cin_verso_non_fourni.jpg";
-            String photoName = (photo != null && photo.getOriginalFilename() != null) 
-                ? photo.getOriginalFilename() : "photo_non_fourni.jpg";
-            
-            demande.setConventionStage(conventionName);
-            demande.setDemandeStage(demandeName);
-            demande.setCv(cvName);
-            demande.setLettreMotivation(lettreName);
-            demande.setCinRecto(cinRectoName);
-            demande.setCinVerso(cinVersoName);
-            demande.setPhoto(photoName);
+            // Gestion des noms de fichiers uploadés
+            demande.setConventionStage(getFileName(conventionStage, "convention_non_fourni.pdf"));
+            demande.setDemandeStage(getFileName(demandeStage, "demande_non_fourni.pdf"));
+            demande.setCv(getFileName(cv, "cv_non_fourni.pdf"));
+            demande.setLettreMotivation(getFileName(lettreMotivation, "lettre_non_fourni.pdf"));
+            demande.setCinRecto(getFileName(cinRecto, "cin_recto_non_fourni.jpg"));
+            demande.setCinVerso(getFileName(cinVerso, "cin_verso_non_fourni.jpg"));
+            demande.setPhoto(getFileName(photo, "photo_non_fourni.jpg"));
 
             DemandeStage nouvelleDemande = service.creerDemande(demande);
             
@@ -273,7 +231,7 @@ public class DemandeStageController {
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
-            System.out.println("ERREUR EXCEPTION: " + e.getMessage());
+            System.out.println("ERREUR: " + e.getMessage());
             e.printStackTrace();
             response.put("success", false);
             response.put("message", "Erreur lors de la création de la demande: " + e.getMessage());
@@ -281,8 +239,13 @@ public class DemandeStageController {
         }
     }
 
+    /**
+     * RECHERCHE DE DEMANDES AVEC FILTRES
+     * - Utilisateur normal : voit seulement ses demandes
+     * - Admin : voit toutes les demandes
+     */
     @GetMapping
-    public ResponseEntity<Map<String, Object>> getToutesDemandes(
+    public ResponseEntity<Map<String, Object>> rechercherDemandes(
             @RequestParam(required = false) String nom,
             @RequestParam(required = false) String prenom,
             @RequestParam(required = false) String typeStage,
@@ -292,93 +255,54 @@ public class DemandeStageController {
         Map<String, Object> response = new HashMap<>();
         
         try {
-            System.out.println("🔍 === CONTRÔLEUR - RECHERCHE DEMANDES ===");
-            System.out.println("URL appelée avec paramètres:");
-            System.out.println("- nom: '" + nom + "'");
-            System.out.println("- prenom: '" + prenom + "'");
-            System.out.println("- typeStage: '" + typeStage + "'");
-            System.out.println("- statut: '" + statut + "'");
-            System.out.println("- search: '" + search + "'");
+            System.out.println("🔍 === RECHERCHE DEMANDES ===");
+            System.out.println("Filtres appliqués:");
+            System.out.println("- nom: " + nom);
+            System.out.println("- prenom: " + prenom);
+            System.out.println("- typeStage: " + typeStage);
+            System.out.println("- statut: " + statut);
+            System.out.println("- search: " + search);
             
-            // Récupérer TOUTES les demandes d'abord
-            List<DemandeStage> toutesLesDemandes = service.toutesLesDemandes();
-            System.out.println("Total demandes récupérées: " + toutesLesDemandes.size());
-            
-            // APPLIQUER LES FILTRES DIRECTEMENT DANS LE CONTRÔLEUR
-            List<DemandeStage> demandesFiltrees = new ArrayList<>();
-            
-            for (DemandeStage demande : toutesLesDemandes) {
-                boolean estRetenue = true;
-                
-                System.out.println("\n--- Test demande: " + demande.getNom() + " " + demande.getPrenom() + " ---");
-                
-                // Filtre par nom
-                if (nom != null && !nom.trim().isEmpty()) {
-                    boolean nomMatch = demande.getNom().toLowerCase().contains(nom.toLowerCase());
-                    System.out.println("Filtre nom '" + nom + "' vs '" + demande.getNom() + "' → " + nomMatch);
-                    if (!nomMatch) {
-                        System.out.println("❌ ÉLIMINÉ par nom");
-                        estRetenue = false;
-                    }
-                }
-                
-                // Filtre par prénom
-                if (estRetenue && prenom != null && !prenom.trim().isEmpty()) {
-                    boolean prenomMatch = demande.getPrenom().toLowerCase().contains(prenom.toLowerCase());
-                    System.out.println("Filtre prénom '" + prenom + "' vs '" + demande.getPrenom() + "' → " + prenomMatch);
-                    if (!prenomMatch) {
-                        System.out.println("❌ ÉLIMINÉ par prénom");
-                        estRetenue = false;
-                    }
-                }
-                
-                // Filtre par type de stage
-                if (estRetenue && typeStage != null && !typeStage.trim().isEmpty()) {
-                    boolean typeMatch = demande.getTypeStage().equalsIgnoreCase(typeStage);
-                    System.out.println("Filtre type '" + typeStage + "' vs '" + demande.getTypeStage() + "' → " + typeMatch);
-                    if (!typeMatch) {
-                        System.out.println("❌ ÉLIMINÉ par type");
-                        estRetenue = false;
-                    }
-                }
-                
-                // Filtre par statut
-                if (estRetenue && statut != null && !statut.trim().isEmpty()) {
-                    boolean statutMatch = demande.getStatut().equalsIgnoreCase(statut);
-                    System.out.println("Filtre statut '" + statut + "' vs '" + demande.getStatut() + "' → " + statutMatch);
-                    if (!statutMatch) {
-                        System.out.println("❌ ÉLIMINÉ par statut");
-                        estRetenue = false;
-                    }
-                }
-                
-                // Recherche globale
-                if (estRetenue && search != null && !search.trim().isEmpty()) {
-                    String searchLower = search.toLowerCase();
-                    boolean searchMatch = demande.getNom().toLowerCase().contains(searchLower) ||
-                                        demande.getPrenom().toLowerCase().contains(searchLower) ||
-                                        demande.getEmail().toLowerCase().contains(searchLower) ||
-                                        demande.getCin().toLowerCase().contains(searchLower);
-                    System.out.println("Recherche '" + search + "' → " + searchMatch);
-                    if (!searchMatch) {
-                        System.out.println("❌ ÉLIMINÉ par recherche");
-                        estRetenue = false;
-                    }
-                }
-                
-                if (estRetenue) {
-                    System.out.println("✅ DEMANDE RETENUE");
-                    demandesFiltrees.add(demande);
-                } else {
-                    System.out.println("❌ DEMANDE ÉLIMINÉE");
-                }
+            // Vérifier l'authentification et les permissions
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth == null || !auth.isAuthenticated() || auth.getName().equals("anonymousUser")) {
+                response.put("success", false);
+                response.put("message", "Authentification requise");
+                return ResponseEntity.status(401).body(response);
             }
             
-            System.out.println("\n🎯 RÉSULTAT FINAL: " + demandesFiltrees.size() + " demandes trouvées");
+            String emailUtilisateur = auth.getName();
+            boolean estAdmin = auth.getAuthorities().stream()
+                .anyMatch(grantedAuthority -> grantedAuthority.getAuthority().equals("ROLE_ADMIN"));
+            
+            System.out.println("Utilisateur: " + emailUtilisateur + " (Admin: " + estAdmin + ")");
+            
+            List<DemandeStage> toutesLesDemandes;
+            String porteeRecherche;
+            
+            if (estAdmin) {
+                // Admin peut voir toutes les demandes
+                toutesLesDemandes = service.toutesLesDemandes();
+                porteeRecherche = "toutes_demandes";
+                System.out.println("Admin - Total demandes: " + toutesLesDemandes.size());
+            } else {
+                // Utilisateur normal ne voit que ses demandes
+                toutesLesDemandes = service.trouverParEmail(emailUtilisateur);
+                porteeRecherche = "mes_demandes_uniquement";
+                System.out.println("User - Ses demandes: " + toutesLesDemandes.size());
+            }
+            
+            // Appliquer les filtres
+            List<DemandeStage> demandesFiltrees = appliquerFiltres(toutesLesDemandes, nom, prenom, typeStage, statut, search);
+            
+            System.out.println("Résultats après filtrage: " + demandesFiltrees.size());
             
             response.put("success", true);
             response.put("data", demandesFiltrees);
             response.put("total", demandesFiltrees.size());
+            response.put("portee_recherche", porteeRecherche);
+            response.put("utilisateur", emailUtilisateur);
+            response.put("est_admin", estAdmin);
             
             return ResponseEntity.ok(response);
             
@@ -386,84 +310,79 @@ public class DemandeStageController {
             System.out.println("ERREUR: " + e.getMessage());
             e.printStackTrace();
             response.put("success", false);
-            response.put("message", "Erreur lors de la récupération des demandes: " + e.getMessage());
+            response.put("message", "Erreur lors de la recherche: " + e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
     }
 
+    /**
+     * EXPORT EXCEL SÉCURISÉ AVEC FILTRAGE PAR DATES
+     * - Utilisateur normal : exporte seulement ses demandes
+     * - Admin : exporte toutes les demandes
+     * - Filtrage par dates possible avec noms de fichiers descriptifs
+     */
     @GetMapping("/export/excel")
     public ResponseEntity<byte[]> exporterDemandesExcel(
             @RequestParam(required = false) String nom,
             @RequestParam(required = false) String prenom,
             @RequestParam(required = false) String typeStage,
             @RequestParam(required = false) String statut,
-            @RequestParam(required = false) String search) {
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String dateDebut,
+            @RequestParam(required = false) String dateFin) {
         
         try {
-            System.out.println("📊 === EXPORT EXCEL DEMANDES ===");
-            System.out.println("Filtres pour export:");
-            System.out.println("- nom: '" + nom + "'");
-            System.out.println("- prenom: '" + prenom + "'");
-            System.out.println("- typeStage: '" + typeStage + "'");
-            System.out.println("- statut: '" + statut + "'");
-            System.out.println("- search: '" + search + "'");
+            System.out.println("📊 === EXPORT EXCEL SÉCURISÉ ===");
+            System.out.println("Filtres d'export:");
+            System.out.println("- nom: " + nom);
+            System.out.println("- prenom: " + prenom);
+            System.out.println("- typeStage: " + typeStage);
+            System.out.println("- statut: " + statut);
+            System.out.println("- search: " + search);
+            System.out.println("- dateDebut: " + dateDebut);
+            System.out.println("- dateFin: " + dateFin);
             
-            // Récupérer les demandes avec les mêmes filtres que la liste
-            List<DemandeStage> toutesLesDemandes = service.toutesLesDemandes();
-            List<DemandeStage> demandesFiltrees = new ArrayList<>();
-            
-            // Appliquer les mêmes filtres que dans getToutesDemandes
-            for (DemandeStage demande : toutesLesDemandes) {
-                boolean estRetenue = true;
-                
-                if (nom != null && !nom.trim().isEmpty()) {
-                    if (!demande.getNom().toLowerCase().contains(nom.toLowerCase())) {
-                        estRetenue = false;
-                    }
-                }
-                
-                if (estRetenue && prenom != null && !prenom.trim().isEmpty()) {
-                    if (!demande.getPrenom().toLowerCase().contains(prenom.toLowerCase())) {
-                        estRetenue = false;
-                    }
-                }
-                
-                if (estRetenue && typeStage != null && !typeStage.trim().isEmpty()) {
-                    if (!demande.getTypeStage().equalsIgnoreCase(typeStage)) {
-                        estRetenue = false;
-                    }
-                }
-                
-                if (estRetenue && statut != null && !statut.trim().isEmpty()) {
-                    if (!demande.getStatut().equalsIgnoreCase(statut)) {
-                        estRetenue = false;
-                    }
-                }
-                
-                if (estRetenue && search != null && !search.trim().isEmpty()) {
-                    String searchLower = search.toLowerCase();
-                    boolean searchMatch = demande.getNom().toLowerCase().contains(searchLower) ||
-                                        demande.getPrenom().toLowerCase().contains(searchLower) ||
-                                        demande.getEmail().toLowerCase().contains(searchLower) ||
-                                        demande.getCin().toLowerCase().contains(searchLower);
-                    if (!searchMatch) {
-                        estRetenue = false;
-                    }
-                }
-                
-                if (estRetenue) {
-                    demandesFiltrees.add(demande);
-                }
+            // Vérifier l'authentification
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth == null || !auth.isAuthenticated() || auth.getName().equals("anonymousUser")) {
+                System.out.println("ERREUR: Accès non authentifié à l'export Excel");
+                return ResponseEntity.status(401).build();
             }
             
-            System.out.println("Demandes à exporter: " + demandesFiltrees.size());
+            String emailUtilisateur = auth.getName();
+            boolean estAdmin = auth.getAuthorities().stream()
+                .anyMatch(grantedAuthority -> grantedAuthority.getAuthority().equals("ROLE_ADMIN"));
+            
+            System.out.println("Export demandé par: " + emailUtilisateur + " (Admin: " + estAdmin + ")");
+            
+            List<DemandeStage> toutesLesDemandes;
+            String prefixeFichier;
+            
+            if (estAdmin) {
+                // Admin exporte toutes les demandes
+                toutesLesDemandes = service.toutesLesDemandes();
+                prefixeFichier = "toutes_demandes_";
+                System.out.println("Export admin - " + toutesLesDemandes.size() + " demandes totales");
+            } else {
+                // Utilisateur exporte seulement ses demandes
+                toutesLesDemandes = service.trouverParEmail(emailUtilisateur);
+                prefixeFichier = "mes_demandes_";
+                System.out.println("Export utilisateur - " + toutesLesDemandes.size() + " demandes personnelles");
+            }
+            
+            // Appliquer tous les filtres y compris les dates
+            List<DemandeStage> demandesFiltrees = appliquerFiltresAvecDates(
+                toutesLesDemandes, nom, prenom, typeStage, statut, search, dateDebut, dateFin);
+            
+            System.out.println("Demandes à exporter après filtrage: " + demandesFiltrees.size());
             
             // Générer le fichier Excel
             byte[] excelData = genererFichierExcel(demandesFiltrees);
             
-            // Nom du fichier avec timestamp
+            // Créer le nom de fichier descriptif
             String timestamp = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-            String filename = "demandes_stage_" + timestamp + ".xlsx";
+            String suffixeDates = construireSuffixeDates(dateDebut, dateFin);
+            String filename = prefixeFichier + timestamp + suffixeDates + ".xlsx";
             
             System.out.println("Fichier Excel généré: " + filename + " (" + excelData.length + " bytes)");
             
@@ -479,7 +398,229 @@ public class DemandeStageController {
         }
     }
 
+    /**
+     * CONSULTATION D'UNE DEMANDE SPÉCIFIQUE PAR ID
+     * Vérification des permissions d'accès
+     */
+    @GetMapping("/{id}")
+    public ResponseEntity<Map<String, Object>> getDemandeParId(@PathVariable Long id) {
+        Map<String, Object> response = new HashMap<>();
+        
+        try {
+            System.out.println("=== CONSULTATION DEMANDE ID: " + id + " ===");
+            
+            // Vérifier l'authentification
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth == null || !auth.isAuthenticated() || auth.getName().equals("anonymousUser")) {
+                response.put("success", false);
+                response.put("message", "Authentification requise");
+                return ResponseEntity.status(401).body(response);
+            }
+            
+            String emailUtilisateur = auth.getName();
+            boolean estAdmin = auth.getAuthorities().stream()
+                .anyMatch(grantedAuthority -> grantedAuthority.getAuthority().equals("ROLE_ADMIN"));
+            
+            System.out.println("Demande par: " + emailUtilisateur + " (Admin: " + estAdmin + ")");
+            
+            return service.trouverParId(id)
+                .map(demande -> {
+                    // Vérifier que l'utilisateur peut accéder à cette demande
+                    if (!estAdmin && !demande.getEmail().equals(emailUtilisateur)) {
+                        System.out.println("ACCÈS REFUSÉ: Utilisateur " + emailUtilisateur + 
+                                         " tente d'accéder à la demande de " + demande.getEmail());
+                        response.put("success", false);
+                        response.put("message", "Accès non autorisé à cette demande");
+                        return ResponseEntity.status(403).body(response);
+                    }
+                    
+                    System.out.println("ACCÈS AUTORISÉ: " + (estAdmin ? "Admin" : "Propriétaire"));
+                    response.put("success", true);
+                    response.put("data", demande);
+                    response.put("acces_autorise", estAdmin ? "admin" : "proprietaire");
+                    return ResponseEntity.ok(response);
+                })
+                .orElseGet(() -> {
+                    System.out.println("DEMANDE NON TROUVÉE: ID " + id);
+                    response.put("success", false);
+                    response.put("message", "Demande non trouvée");
+                    return ResponseEntity.notFound().build();
+                });
+        } catch (Exception e) {
+            System.out.println("ERREUR: " + e.getMessage());
+            e.printStackTrace();
+            response.put("success", false);
+            response.put("message", "Erreur: " + e.getMessage());
+            return ResponseEntity.badRequest().body(response);
+        }
+    }
+
+    // === MÉTHODES UTILITAIRES ===
+
+    /**
+     * Récupère le nom de fichier original ou retourne un nom par défaut
+     */
+    private String getFileName(MultipartFile file, String defaultName) {
+        return (file != null && file.getOriginalFilename() != null) 
+            ? file.getOriginalFilename() : defaultName;
+    }
+
+    /**
+     * Construit le suffixe du nom de fichier basé sur les filtres de dates
+     */
+    private String construireSuffixeDates(String dateDebut, String dateFin) {
+        if (dateDebut != null && !dateDebut.trim().isEmpty() && 
+            dateFin != null && !dateFin.trim().isEmpty()) {
+            return "_du_" + dateDebut + "_au_" + dateFin;
+        } else if (dateDebut != null && !dateDebut.trim().isEmpty()) {
+            return "_depuis_" + dateDebut;
+        } else if (dateFin != null && !dateFin.trim().isEmpty()) {
+            return "_jusqu_" + dateFin;
+        }
+        return "";
+    }
+
+    /**
+     * Applique les filtres standard (sans dates)
+     */
+    private List<DemandeStage> appliquerFiltres(List<DemandeStage> demandes, String nom, String prenom, 
+                                              String typeStage, String statut, String search) {
+        return appliquerFiltresAvecDates(demandes, nom, prenom, typeStage, statut, search, null, null);
+    }
+
+    /**
+     * Applique tous les filtres y compris les filtres par dates
+     * CORRIGÉ : Protection contre les null pointers
+     */
+    private List<DemandeStage> appliquerFiltresAvecDates(List<DemandeStage> demandes, String nom, String prenom, 
+                                                       String typeStage, String statut, String search,
+                                                       String dateDebut, String dateFin) {
+        List<DemandeStage> demandesFiltrees = new ArrayList<>();
+        
+        // Vérification de sécurité pour la liste d'entrée
+        if (demandes == null) {
+            System.out.println("ATTENTION: Liste de demandes null reçue");
+            return demandesFiltrees;
+        }
+        
+        // Parser les dates si fournies
+        LocalDate dateDebutParsee = null;
+        LocalDate dateFinParsee = null;
+        
+        try {
+            if (dateDebut != null && !dateDebut.trim().isEmpty()) {
+                dateDebutParsee = LocalDate.parse(dateDebut);
+                System.out.println("Date début parsée: " + dateDebutParsee);
+            }
+            if (dateFin != null && !dateFin.trim().isEmpty()) {
+                dateFinParsee = LocalDate.parse(dateFin);
+                System.out.println("Date fin parsée: " + dateFinParsee);
+            }
+        } catch (Exception e) {
+            System.out.println("ERREUR parsing dates: " + e.getMessage());
+            // En cas d'erreur de parsing, ignorer les filtres de date
+            dateDebutParsee = null;
+            dateFinParsee = null;
+        }
+        
+        int demandesRetenues = 0;
+        int demandesRejetees = 0;
+        
+        for (DemandeStage demande : demandes) {
+            boolean estRetenue = true;
+            
+            // CORRECTION PRINCIPALE: Vérification de sécurité pour éviter les null pointers
+            if (demande == null) {
+                System.out.println("ATTENTION: Demande null trouvée, ignorée");
+                continue;
+            }
+            
+            // Filtre par nom - CORRIGÉ
+            if (estRetenue && nom != null && !nom.trim().isEmpty()) {
+                if (demande.getNom() == null || !demande.getNom().toLowerCase().contains(nom.toLowerCase())) {
+                    estRetenue = false;
+                }
+            }
+            
+            // Filtre par prénom - CORRIGÉ
+            if (estRetenue && prenom != null && !prenom.trim().isEmpty()) {
+                if (demande.getPrenom() == null || !demande.getPrenom().toLowerCase().contains(prenom.toLowerCase())) {
+                    estRetenue = false;
+                }
+            }
+            
+            // Filtre par type de stage - CORRIGÉ
+            if (estRetenue && typeStage != null && !typeStage.trim().isEmpty()) {
+                if (demande.getTypeStage() == null || !demande.getTypeStage().equalsIgnoreCase(typeStage)) {
+                    estRetenue = false;
+                }
+            }
+            
+            // Filtre par statut - CORRIGÉ
+            if (estRetenue && statut != null && !statut.trim().isEmpty()) {
+                if (demande.getStatut() == null || !demande.getStatut().equalsIgnoreCase(statut)) {
+                    estRetenue = false;
+                }
+            }
+            
+            // Filtre par date de début - CORRIGÉ
+            if (estRetenue && dateDebutParsee != null) {
+                if (demande.getDateDebut() == null || demande.getDateDebut().isBefore(dateDebutParsee)) {
+                    estRetenue = false;
+                }
+            }
+            
+            // Filtre par date de fin - CORRIGÉ
+            if (estRetenue && dateFinParsee != null) {
+                if (demande.getDateDebut() == null || demande.getDateDebut().isAfter(dateFinParsee)) {
+                    estRetenue = false;
+                }
+            }
+            
+            // Recherche globale - CORRIGÉ AVEC PROTECTION NULL
+            if (estRetenue && search != null && !search.trim().isEmpty()) {
+                String searchLower = search.toLowerCase();
+                boolean searchMatch = false;
+                
+                // Vérifier chaque champ individuellement pour éviter les null pointers
+                if (demande.getNom() != null && demande.getNom().toLowerCase().contains(searchLower)) {
+                    searchMatch = true;
+                }
+                if (!searchMatch && demande.getPrenom() != null && demande.getPrenom().toLowerCase().contains(searchLower)) {
+                    searchMatch = true;
+                }
+                if (!searchMatch && demande.getEmail() != null && demande.getEmail().toLowerCase().contains(searchLower)) {
+                    searchMatch = true;
+                }
+                if (!searchMatch && demande.getCin() != null && demande.getCin().toLowerCase().contains(searchLower)) {
+                    searchMatch = true;
+                }
+                
+                if (!searchMatch) {
+                    estRetenue = false;
+                }
+            }
+            
+            if (estRetenue) {
+                demandesFiltrees.add(demande);
+                demandesRetenues++;
+            } else {
+                demandesRejetees++;
+            }
+        }
+        
+        System.out.println("Filtrage terminé: " + demandesRetenues + " retenues, " + demandesRejetees + " rejetées");
+        
+        return demandesFiltrees;
+    }
+
+    /**
+     * Génère le fichier Excel avec toutes les demandes fournies
+     */
     private byte[] genererFichierExcel(List<DemandeStage> demandes) throws Exception {
+        System.out.println("=== GÉNÉRATION FICHIER EXCEL ===");
+        System.out.println("Nombre de demandes à exporter: " + demandes.size());
+        
         try (Workbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("Demandes de Stage");
             
@@ -492,13 +633,13 @@ public class DemandeStageController {
             headerStyle.setFillForegroundColor(IndexedColors.LIGHT_BLUE.getIndex());
             headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
             
-            // Créer l'en-tête
+            // Créer l'en-tête avec toutes les colonnes
             Row headerRow = sheet.createRow(0);
             String[] headers = {
                 "ID", "Nom", "Prénom", "Email", "Téléphone", "CIN", "Sexe",
                 "Adresse", "Type Stage", "Date Début", "Durée", "Statut",
                 "Date Demande", "Date Traitement", "Commentaire"
-            };
+                };
             
             for (int i = 0; i < headers.length; i++) {
                 Cell cell = headerRow.createCell(i);
@@ -506,87 +647,49 @@ public class DemandeStageController {
                 cell.setCellStyle(headerStyle);
             }
             
-            // Remplir les données
+            // Formatters pour les dates
             DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
             DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
             
+            // Remplir les données
             int rowNum = 1;
             for (DemandeStage demande : demandes) {
                 Row row = sheet.createRow(rowNum++);
                 
                 row.createCell(0).setCellValue(demande.getId());
-                row.createCell(1).setCellValue(demande.getNom());
-                row.createCell(2).setCellValue(demande.getPrenom());
-                row.createCell(3).setCellValue(demande.getEmail());
-                row.createCell(4).setCellValue(demande.getTelephone());
-                row.createCell(5).setCellValue(demande.getCin());
-                row.createCell(6).setCellValue(demande.getSexe());
-                row.createCell(7).setCellValue(demande.getAdresseDomicile());
-                row.createCell(8).setCellValue(demande.getTypeStage());
-                row.createCell(9).setCellValue(demande.getDateDebut().format(dateFormatter));
-                row.createCell(10).setCellValue(demande.getDuree());
-                row.createCell(11).setCellValue(demande.getStatut());
-                row.createCell(12).setCellValue(demande.getDateDemande().format(dateTimeFormatter));
+                row.createCell(1).setCellValue(demande.getNom() != null ? demande.getNom() : "");
+                row.createCell(2).setCellValue(demande.getPrenom() != null ? demande.getPrenom() : "");
+                row.createCell(3).setCellValue(demande.getEmail() != null ? demande.getEmail() : "");
+                row.createCell(4).setCellValue(demande.getTelephone() != null ? demande.getTelephone() : "");
+                row.createCell(5).setCellValue(demande.getCin() != null ? demande.getCin() : "");
+                row.createCell(6).setCellValue(demande.getSexe() != null ? demande.getSexe() : "");
+                row.createCell(7).setCellValue(demande.getAdresseDomicile() != null ? demande.getAdresseDomicile() : "");
+                row.createCell(8).setCellValue(demande.getTypeStage() != null ? demande.getTypeStage() : "");
+                row.createCell(9).setCellValue(demande.getDateDebut() != null ? demande.getDateDebut().format(dateFormatter) : "");
+                row.createCell(10).setCellValue(demande.getDuree() != null ? demande.getDuree() : "");
+                row.createCell(11).setCellValue(demande.getStatut() != null ? demande.getStatut() : "");
+                row.createCell(12).setCellValue(demande.getDateDemande() != null ? demande.getDateDemande().format(dateTimeFormatter) : "");
                 row.createCell(13).setCellValue(demande.getDateTraitement() != null ? 
                     demande.getDateTraitement().format(dateTimeFormatter) : "");
                 row.createCell(14).setCellValue(demande.getCommentaire() != null ? 
                     demande.getCommentaire() : "");
             }
             
-            // Ajuster la largeur des colonnes
+            // Ajuster automatiquement la largeur des colonnes
             for (int i = 0; i < headers.length; i++) {
                 sheet.autoSizeColumn(i);
             }
             
-            // Convertir en bytes
+            System.out.println("Excel généré avec " + (rowNum - 1) + " lignes de données");
+            
+            // Convertir le workbook en tableau de bytes
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             workbook.write(outputStream);
-            return outputStream.toByteArray();
-        }
-    }
-
-    @GetMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> getDemandeParId(@PathVariable Long id) {
-        Map<String, Object> response = new HashMap<>();
-        
-        return service.trouverParId(id)
-                .map(demande -> {
-                    response.put("success", true);
-                    response.put("data", demande);
-                    return ResponseEntity.ok(response);
-                })
-                .orElseGet(() -> {
-                    response.put("success", false);
-                    response.put("message", "Demande non trouvée");
-                    return ResponseEntity.notFound().build();
-                });
-    }
-
-    @PutMapping("/{id}/statut")
-    public ResponseEntity<Map<String, Object>> modifierStatut(
-            @PathVariable Long id, 
-            @RequestBody Map<String, String> statutData) {
-        Map<String, Object> response = new HashMap<>();
-        
-        try {
-            String statut = statutData.get("statut");
-            String commentaire = statutData.get("commentaire");
+            byte[] excelBytes = outputStream.toByteArray();
             
-            DemandeStage demande = service.modifierStatut(id, statut);
-            if (commentaire != null && !commentaire.trim().isEmpty()) {
-                demande.setCommentaire(commentaire);
-                demande = service.creerDemande(demande);
-            }
+            System.out.println("Fichier Excel converti en bytes: " + excelBytes.length + " bytes");
             
-            response.put("success", true);
-            response.put("message", "Statut modifié avec succès");
-            response.put("data", demande);
-            
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            response.put("success", false);
-            response.put("message", "Erreur lors de la modification du statut: " + e.getMessage());
-            return ResponseEntity.badRequest().body(response);
+            return excelBytes;
         }
     }
 }
