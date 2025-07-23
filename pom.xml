@@ -14,7 +14,7 @@
 	<name>dmstage</name>
 	<description>Backend API pour demandes de stage</description>
 	<properties>
-		<java.version>11</java.version>
+		<java.version>17</java.version>
 	</properties>
 	<dependencies>
 		<dependency>

@@ -4,7 +4,13 @@ import javax.persistence.*;
 import javax.validation.constraints.Email;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.Size;
+
+import org.springframework.boot.context.properties.bind.DefaultValue;
+
+import com.mysql.cj.protocol.a.LocalDateTimeValueEncoder;
+
 import java.time.LocalDateTime;
+import java.util.Date;
 
 @Entity
 @Table(name = "utilisateurs")
@@ -30,14 +36,11 @@ public class Utilisateur {
     private String motDePasse;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
     private Role role = Role.USER;
 
-    @Column(nullable = false)
     private Boolean actif = true;
 
-    @Column(nullable = false)
-    private LocalDateTime dateCreation;
+    private LocalDateTime dateCreation = LocalDateTime.now();
 
     // Enum pour les rôles
     public enum Role {
