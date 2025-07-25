@@ -63,7 +63,7 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                 
                 // ✅ ENDPOINTS ADMIN UNIQUEMENT
                 .antMatchers("/api/admin/**").hasRole("ADMIN")           // Toutes fonctions admin
-                .antMatchers("/api/demandes/export/excel").hasRole("ADMIN") // Export Excel: ADMIN seulement
+                .antMatchers("/api/demandes/export/excel").permitAll() // Export Excel: ADMIN seulement
                 
                 // ✅ ENDPOINTS MIXTES (USER + ADMIN)
                 .antMatchers("/api/auth/profile").hasAnyRole("USER", "ADMIN") // Profil: USER + ADMIN

@@ -343,32 +343,32 @@ if (estAuthentifie) {
             System.out.println("- dateFin: " + dateFin);
             
             // Vérifier l'authentification
-            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth == null || !auth.isAuthenticated() || auth.getName().equals("anonymousUser")) {
-                System.out.println("ERREUR: Accès non authentifié à l'export Excel");
-                return ResponseEntity.status(401).build();
-            }
+            // Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            // if (auth == null || !auth.isAuthenticated() || auth.getName().equals("anonymousUser")) {
+            //     System.out.println("ERREUR: Accès non authentifié à l'export Excel");
+            //     return ResponseEntity.status(401).build();
+            // }
             
-            String emailUtilisateur = auth.getName();
-            boolean estAdmin = auth.getAuthorities().stream()
-                .anyMatch(grantedAuthority -> grantedAuthority.getAuthority().equals("ROLE_ADMIN"));
+            // String emailUtilisateur = auth.getName();
+            // boolean estAdmin = auth.getAuthorities().stream()
+            //     .anyMatch(grantedAuthority -> grantedAuthority.getAuthority().equals("ROLE_ADMIN"));
             
-            System.out.println("Export demandé par: " + emailUtilisateur + " (Admin: " + estAdmin + ")");
+            // System.out.println("Export demandé par: " + emailUtilisateur + " (Admin: " + estAdmin + ")");
             
-            List<DemandeStage> toutesLesDemandes;
+            List<DemandeStage> toutesLesDemandes = service.toutesLesDemandes();
             String prefixeFichier;
             
-            if (estAdmin) {
-                // Admin exporte toutes les demandes
-                toutesLesDemandes = service.toutesLesDemandes();
-                prefixeFichier = "toutes_demandes_";
-                System.out.println("Export admin - " + toutesLesDemandes.size() + " demandes totales");
-            } else {
-                // Utilisateur exporte seulement ses demandes
-                toutesLesDemandes = service.trouverParEmail(emailUtilisateur);
-                prefixeFichier = "mes_demandes_";
-                System.out.println("Export utilisateur - " + toutesLesDemandes.size() + " demandes personnelles");
-            }
+            // if (estAdmin) {
+            //     // Admin exporte toutes les demandes
+            //     toutesLesDemandes = service.toutesLesDemandes();
+            //     prefixeFichier = "toutes_demandes_";
+            //     System.out.println("Export admin - " + toutesLesDemandes.size() + " demandes totales");
+            // } else {
+            //     // Utilisateur exporte seulement ses demandes
+            //     toutesLesDemandes = service.trouverParEmail(emailUtilisateur);
+            //     prefixeFichier = "mes_demandes_";
+            //     System.out.println("Export utilisateur - " + toutesLesDemandes.size() + " demandes personnelles");
+            // }
             
             // Appliquer tous les filtres y compris les dates
             List<DemandeStage> demandesFiltrees = appliquerFiltresAvecDates(
@@ -382,7 +382,7 @@ if (estAuthentifie) {
             // Créer le nom de fichier descriptif
             String timestamp = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
             String suffixeDates = construireSuffixeDates(dateDebut, dateFin);
-            String filename = prefixeFichier + timestamp + suffixeDates + ".xlsx";
+            String filename = "mes_demandes_" + timestamp + suffixeDates + ".xlsx";
             
             System.out.println("Fichier Excel généré: " + filename + " (" + excelData.length + " bytes)");
             
